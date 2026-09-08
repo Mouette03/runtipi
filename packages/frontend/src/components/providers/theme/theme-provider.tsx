@@ -1,44 +1,121 @@
-import { useUserContext } from '@/context/user-context';
-import { useUIStore } from '@/stores/ui-store';
-import Cookies from 'js-cookie';
-import type React from 'react';
-import { useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 
-type Props = {
-  children: React.ReactNode;
-  initialTheme?: string;
+export type ThemeMode = 'system' | 'light' | 'dark';
+
+interface ThemeContextType {
+  theme: ThemeMode;
+  resolvedTheme: 'light' | 'dark';
+  setTheme: (theme: ThemeMode) => void;
+  supportsSystemTheme: boolean;
+}
+
+const safeStorage = {
+  get: (key: string): string | null => {
+    try {
+      return typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+    } catch {
+      return null;
+    }
+  },
+  set: (key: string, value: string): void => {
+    try {
+      if (typeof window !== 'undefined') localStorage.setItem(key, value);
+    } catch {
+      // Ignoré si stockage désactivé ou quota atteint
+    }
+  },
 };
 
-export const ThemeProvider = (props: Props) => {
-  const { children, initialTheme } = props;
-  const { themeBase, themeColor } = useUserContext();
+const ThemeContext = createContext<ThemeContextType>({
+  theme: 'system',
+  resolvedTheme: 'light',
+  setTheme: () => null,
+  supportsSystemTheme: false,
+});
 
-  const theme = useUIStore((state) => state.theme);
-  const setDarkMode = useUIStore((state) => state.setDarkMode);
+export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const isMatchMediaSupported =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-color-scheme: dark)').media !== 'not all';
+
+  const [theme, setThemeState] = useState<ThemeMode>(() => {
+    return (safeStorage.get('tipi-theme-mode') as ThemeMode) || 'system';
+  });
+
+  const [systemIsDark, setSystemIsDark] = useState<boolean>(() => {
+    if (!isMatchMediaSupported) return false;
+    try {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    } catch {
+      return false;
+    }
+  });
 
   useEffect(() => {
-    if (themeBase) {
-      document.body.dataset.bsThemeBase = themeBase;
+    if (!isMatchMediaSupported) return;
+
+    let mediaQuery: MediaQueryList;
+    try {
+      mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    } catch {
+      return;
     }
 
-    if (themeColor) {
-      document.body.dataset.bsThemePrimary = themeColor;
+    const handleChange = (e: MediaQueryListEvent | MediaQueryList) => {
+      setSystemIsDark(e.matches);
+    };
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange);
+    } else if (typeof (mediaQuery as any).addListener === 'function') {
+      (mediaQuery as any).addListener(handleChange);
     }
 
-    if (theme) {
-      Cookies.set('theme', theme || initialTheme || 'light', { path: '/', expires: 365 });
-      document.body.dataset.bsTheme = theme;
-    } else if (!Cookies.get('theme')) {
-      // Detect system theme
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      setDarkMode(systemTheme === 'dark');
-      Cookies.set('theme', systemTheme, { path: '/', expires: 365 });
-      document.body.dataset.bsTheme = systemTheme;
+    return () => {
+      if (typeof mediaQuery.removeEventListener === 'function') {
+        mediaQuery.removeEventListener('change', handleChange);
+      } else if (typeof (mediaQuery as any).removeListener === 'function') {
+        (mediaQuery as any).removeListener(handleChange);
+      }
+    };
+  }, [isMatchMediaSupported]);
+
+  const resolvedTheme: 'light' | 'dark' =
+    theme === 'system'
+      ? (isMatchMediaSupported && systemIsDark ? 'dark' : 'light')
+      : theme;
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+
+    root.classList.remove('light', 'dark');
+    root.classList.add(resolvedTheme);
+    root.setAttribute('data-theme', resolvedTheme);
+
+    if (root.style && 'colorScheme' in root.style) {
+      root.style.colorScheme = resolvedTheme;
     }
+  }, [resolvedTheme]);
 
-    const cookieTheme = Cookies.get('theme');
-    setDarkMode(cookieTheme === 'dark');
-  }, [initialTheme, setDarkMode, theme, themeBase, themeColor]);
+  const setTheme = (newTheme: ThemeMode) => {
+    safeStorage.set('tipi-theme-mode', newTheme);
+    setThemeState(newTheme);
+  };
 
-  return children;
+  return (
+    <ThemeContext.Provider
+      value={{
+        theme,
+        resolvedTheme,
+        setTheme,
+        supportsSystemTheme: isMatchMediaSupported,
+      }}
+    >
+      {children}
+    </ThemeContext.Provider>
+  );
 };
+
+export const useTheme = () => useContext(ThemeContext);

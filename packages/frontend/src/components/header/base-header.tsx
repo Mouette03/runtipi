@@ -1,6 +1,6 @@
 import { getLogo } from '@/lib/theme/theme';
-import { useUIStore } from '@/stores/ui-store';
-import { IconBrandGithub, IconCertificate, IconHeart, IconLogin, IconLogout, IconMoon, IconSun } from '@tabler/icons-react';
+import { ThemeDropdown } from '../providers/theme/theme-dropdown';
+import { IconBrandGithub, IconCertificate, IconHeart, IconLogin, IconLogout } from '@tabler/icons-react';
 import clsx from 'clsx';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -29,9 +29,6 @@ export const BaseHeader = (props: BaseHeaderProps) => {
     onLogin,
     navbarContent,
   } = props;
-
-  const setDarkMode = useUIStore((state) => state.setDarkMode);
-  const theme = useUIStore((state) => state.theme);
 
   const { t } = useTranslation();
 
@@ -85,7 +82,7 @@ export const BaseHeader = (props: BaseHeaderProps) => {
               </a>
             </div>
           </div>
-          <div style={{ zIndex: 1 }} className="d-flex">
+          <div style={{ zIndex: 1 }} className="d-flex align-items-center">
             {showCertificateButton && (
               <>
                 <Tooltip className="tooltip" anchorSelect=".downloadCert">
@@ -94,39 +91,19 @@ export const BaseHeader = (props: BaseHeaderProps) => {
                 <button
                   type="button"
                   onClick={downloadCertificate}
-                  className="downloadCert nav-link px-0 cursor-pointer"
+                  className="downloadCert nav-link px-0 cursor-pointer me-3"
                   data-testid="download-certificate-button"
                 >
                   <IconCertificate size={20} />
                 </button>
               </>
             )}
-            <Tooltip className="tooltip" anchorSelect=".darkMode">
-              {t('HEADER_DARK_MODE')}
-            </Tooltip>
-            <button
-              type="button"
-              onClick={() => setDarkMode(true)}
-              className={clsx('darkMode nav-link px-0 cursor-pointer', {
-                'visually-hidden': theme === 'dark',
-              })}
-              data-testid="dark-mode-toggle"
-            >
-              <IconMoon data-testid="icon-moon" size={20} />
-            </button>
-            <Tooltip className="tooltip" anchorSelect=".lightMode">
-              {t('HEADER_LIGHT_MODE')}
-            </Tooltip>
-            <button
-              type="button"
-              onClick={() => setDarkMode(false)}
-              className={clsx('lightMode nav-link px-0 cursor-pointer ', {
-                'visually-hidden': theme === 'light',
-              })}
-              data-testid="light-mode-toggle"
-            >
-              <IconSun data-testid="icon-sun" size={20} />
-            </button>
+
+            {/* Nouveau menu déroulant : Clair, Sombre et Système */}
+            <div className="me-3">
+              <ThemeDropdown />
+            </div>
+
             <Tooltip className="tooltip" anchorSelect=".logOut">
               {isLoggedIn ? t('HEADER_LOGOUT') : t('HEADER_LOGIN')}
             </Tooltip>

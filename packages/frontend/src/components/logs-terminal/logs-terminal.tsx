@@ -35,7 +35,7 @@ export const LogsTerminal = (props: Props) => {
 
   return (
     <div>
-      <div className="row d-flex flex-wrap align-items-center ps-1 gy-2">
+      <div className="row d-flex flex-wrap align-items-center gy-2">
         <div className="col-6 col-md-auto">
           <label className="form-check form-switch mb-0" htmlFor="follow-logs">
             <input id="follow-logs" className="form-check-input" type="checkbox" checked={follow} onChange={() => setFollow(!follow)} />

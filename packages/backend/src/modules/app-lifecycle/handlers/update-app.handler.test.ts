@@ -189,15 +189,17 @@ test('accepts an update when all required notices are acknowledged with a full s
 
 test('rejects an acknowledged update when the snapshot is incomplete', async () => {
   const { handler } = await createHandler({ updateNotices: [migrationNotice] });
+  const fingerprint = computeUpdateNoticesFingerprint([migrationNotice]);
 
-  // Missing target revision
+  // Missing target revision (the fingerprint is valid, so the rejection
+  // comes from the missing reviewed revision)
   await expect(
     handler.execute(appUrn, {
       performBackup: true,
       acknowledgedNoticeIds: [migrationNotice.id],
-      noticesFingerprint: 'fingerprint',
+      noticesFingerprint: fingerprint,
     }),
-  ).rejects.toThrow();
+  ).rejects.toMatchObject({ message: 'APP_UPDATE_ERROR_TARGET_REQUIRED' });
 
   // Missing fingerprint
   await expect(
@@ -206,7 +208,7 @@ test('rejects an acknowledged update when the snapshot is incomplete', async () 
       acknowledgedNoticeIds: [migrationNotice.id],
       targetTipiVersion: 2,
     }),
-  ).rejects.toThrow();
+  ).rejects.toMatchObject({ message: 'APP_UPDATE_ERROR_FINGERPRINT_REQUIRED' });
 });
 
 test('rejects an update with a specific error when a notice is not acknowledged', async () => {

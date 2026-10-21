@@ -121,10 +121,16 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
   const allRequiredAcknowledged = requiredNoticeIds.every((id) => acknowledgedNoticeIds.includes(id));
 
   const toggleAcknowledged = (noticeId: string, checked: boolean) => {
-    setAcknowledged((state) => ({
-      snapshotKey: noticesSnapshotKey,
-      ids: checked ? [...state.ids, noticeId] : state.ids.filter((id) => id !== noticeId),
-    }));
+    setAcknowledged((state) => {
+      // Start from an empty list when the snapshot changed, so old
+      // confirmations are not silently restored by checking one notice.
+      const ids = state.snapshotKey === noticesSnapshotKey ? state.ids : [];
+
+      return {
+        snapshotKey: noticesSnapshotKey,
+        ids: checked ? [...ids, noticeId] : ids.filter((id) => id !== noticeId),
+      };
+    });
   };
 
   const steps = useMemo(() => {
@@ -336,7 +342,13 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
               </Button>
             )}
             {isLastStep && (
-              <Button onClick={handleSubmit} intent="success" loading={update.isPending}>
+              <Button
+                onClick={handleSubmit}
+                intent="success"
+                loading={update.isPending}
+                disabled={hasWarningsStep && !allRequiredAcknowledged}
+                data-testid="update-submit-button"
+              >
                 {t('APP_UPDATE_FORM_SUBMIT')}
               </Button>
             )}

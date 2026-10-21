@@ -80,6 +80,7 @@ export class AppLifecycleCommandFactory {
           eventData.wasRunningBeforeUpdate,
           context,
           eventData.targetTipiVersion,
+          eventData.noticesFingerprint,
         );
       default:
         throw new Error(`Unknown command: ${command}`);

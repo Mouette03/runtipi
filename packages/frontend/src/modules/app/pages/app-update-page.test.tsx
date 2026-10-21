@@ -290,4 +290,77 @@ describe('AppUpdatePage', () => {
     expect(screen.getByText('Vérifiez les journaux.')).toBeInTheDocument();
     await i18n.changeLanguage('en');
   });
+
+  it('discards previous acknowledgements and blocks navigation when the notice snapshot changes', async () => {
+    const buildAppData = (fingerprint: string) =>
+      ({
+        info: {
+          name: 'Example App',
+          urn: 'example-app:store-id',
+          version: '1.0.0',
+        },
+        metadata: {
+          latestDockerVersion: '2.0.0',
+          latestVersion: 2,
+          updateNotices: [
+            {
+              id: 'notice-1',
+              tipi_version: 2,
+              severity: 'warning',
+              title: 'First warning',
+              message: 'First warning message.',
+              before_update: [],
+              after_update: [],
+              require_confirmation: true,
+            },
+            {
+              id: 'notice-2',
+              tipi_version: 2,
+              severity: 'warning',
+              title: 'Second warning',
+              message: 'Second warning message.',
+              before_update: [],
+              after_update: [],
+              require_confirmation: true,
+            },
+          ],
+          updateNoticesFingerprint: fingerprint,
+        },
+      }) as unknown as Parameters<typeof AppUpdatePage>[0]['loaderData'];
+
+    const view = render(
+      <I18nextProvider i18n={i18n}>
+        <AppUpdatePage {...({ loaderData: buildAppData('fingerprint-a') } as unknown as Parameters<typeof AppUpdatePage>[0])} />
+      </I18nextProvider>,
+    );
+
+    // Acknowledge both notices on the first snapshot
+    const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+    const [firstNoticeCheckbox, secondNoticeCheckbox] = checkboxes;
+    if (!firstNoticeCheckbox || !secondNoticeCheckbox) throw new Error('Notice checkboxes not found');
+    fireEvent.click(firstNoticeCheckbox);
+    fireEvent.click(secondNoticeCheckbox);
+    expect(screen.getByText('Next').closest('button')).toHaveProperty('disabled', false);
+
+    // The catalog refreshed: the notice content changed under the same ids
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <AppUpdatePage {...({ loaderData: buildAppData('fingerprint-b') } as unknown as Parameters<typeof AppUpdatePage>[0])} />
+      </I18nextProvider>,
+    );
+
+    // Both confirmations were discarded and navigation is blocked again
+    // (only the first two checkboxes are the notice acknowledgements; the last
+    // one is the backup switch of the final step)
+    const nextButton = screen.getByText('Next').closest('button');
+    expect(nextButton).toHaveProperty('disabled', true);
+    const noticeCheckboxes = screen.getAllByRole('checkbox').slice(0, 2) as HTMLInputElement[];
+    expect(noticeCheckboxes.every((c) => !c.checked)).toBe(true);
+
+    // Checking one notice does not silently restore the other old confirmation
+    fireEvent.click(noticeCheckboxes[0] as HTMLInputElement);
+    expect((noticeCheckboxes[0] as HTMLInputElement).checked).toBe(true);
+    expect((noticeCheckboxes[1] as HTMLInputElement).checked).toBe(false);
+    expect(nextButton).toHaveProperty('disabled', true);
+  });
 });

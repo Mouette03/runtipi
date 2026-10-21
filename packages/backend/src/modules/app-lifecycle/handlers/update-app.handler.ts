@@ -103,7 +103,11 @@ export class UpdateAppHandler implements ILifecycleHandler<UpdateAppParams> {
             form: app.config,
             performBackup: params?.performBackup ?? false,
             wasRunningBeforeUpdate: app.status === 'running',
-            targetTipiVersion: params?.targetTipiVersion,
+            // Always pin execution to the revision validated above, even
+            // when no notice was displayed, so the staged files are verified
+            // against it before deploying.
+            targetTipiVersion: latestVersion,
+            noticesFingerprint: params?.noticesFingerprint,
           },
           context,
         );

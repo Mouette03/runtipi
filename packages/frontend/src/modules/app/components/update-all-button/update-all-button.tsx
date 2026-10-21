@@ -51,12 +51,15 @@ export const UpdateAllButton = () => {
     },
     onSuccess: (data) => {
       const skippedCount = data?.skippedAppUrns?.length ?? 0;
+      const updatedCount = data?.updatedAppIds?.length ?? 0;
       // Apps with update notices requiring confirmation are never updated by
       // the bulk action; report them so the user updates them individually.
       if (skippedCount > 0) {
         toast(t('APP_UPDATE_ALL_SKIPPED_NOTICES', { count: skippedCount }), { icon: '⚠️' });
       }
-      toast.loading(t('MY_APPS_UPDATE_ALL_IN_PROGRESS'), { duration: 3000 });
+      if (updatedCount > 0) {
+        toast.loading(t('MY_APPS_UPDATE_ALL_IN_PROGRESS'), { duration: 3000 });
+      }
     },
     onError: (e: TranslatableError) => {
       toast.error(t(e.message, e.intlParams));

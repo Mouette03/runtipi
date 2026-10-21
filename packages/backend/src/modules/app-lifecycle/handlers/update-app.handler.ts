@@ -2,6 +2,7 @@ import { TranslatableError } from '@/common/error/translatable-error';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { ConflictException, HttpStatus, Injectable } from '@nestjs/common';
+import { computeUpdateNoticesFingerprint, selectUpdateNotices } from '@runtipi/common/schemas';
 import type { AppUrn } from '@runtipi/common/types';
 import semver from 'semver';
 import { AppsRepository } from '../../apps/apps.repository';
@@ -11,7 +12,18 @@ import { AppJobService } from '../services/app-job.service';
 import { StatusManagerService } from '../services/status-manager.service';
 import { type HandlerResult, type ILifecycleHandler } from './base-handler';
 
-export type UpdateAppParams = { performBackup: boolean };
+export type UpdateAppParams = {
+  performBackup: boolean;
+  /**
+   * Ids of the update notices requiring confirmation that were acknowledged
+   * in the update wizard.
+   */
+  acknowledgedNoticeIds?: string[];
+  /** The package revision the user reviewed in the wizard. */
+  targetTipiVersion?: number;
+  /** Fingerprint of the notices displayed to the user. */
+  noticesFingerprint?: string;
+};
 
 @Injectable()
 export class UpdateAppHandler implements ILifecycleHandler<UpdateAppParams> {
@@ -32,10 +44,36 @@ export class UpdateAppHandler implements ILifecycleHandler<UpdateAppParams> {
     if (app.status !== 'running' && app.status !== 'stopped') throw new ConflictException('Wait for the current app operation to finish.');
 
     const version = this.config.get('version');
-    const { minTipiVersion } = await this.marketplaceService.getAppUpdateInfo(appUrn);
+    const { minTipiVersion, latestVersion, updateNotices } = await this.marketplaceService.getAppUpdateInfo(appUrn);
 
     if (minTipiVersion && semver.valid(version) && semver.lt(version, minTipiVersion)) {
       throw new TranslatableError('APP_UPDATE_ERROR_MIN_TIPI_VERSION', { id: appUrn, minVersion: minTipiVersion });
+    }
+
+    // Enforce update notice acknowledgements before any state change. The
+    // applicable notices are recomputed from the catalog at submission time:
+    // acknowledgements are never persisted, so a failed update shows its
+    // notices again on the next attempt.
+    const applicableNotices = selectUpdateNotices(updateNotices, app.version, latestVersion);
+    const requiredNotices = applicableNotices.filter((notice) => notice.require_confirmation);
+
+    if (requiredNotices.length > 0) {
+      const acknowledged = new Set(params?.acknowledgedNoticeIds ?? []);
+      const missing = requiredNotices.filter((notice) => !acknowledged.has(notice.id));
+
+      if (missing.length > 0) {
+        throw new TranslatableError('APP_UPDATE_ERROR_NOTICES_NOT_ACKNOWLEDGED', { id: appUrn }, HttpStatus.BAD_REQUEST);
+      }
+
+      if (params?.targetTipiVersion !== undefined && params.targetTipiVersion !== latestVersion) {
+        throw new TranslatableError('APP_UPDATE_ERROR_TARGET_CHANGED', { id: appUrn }, HttpStatus.CONFLICT);
+      }
+
+      const fingerprint = computeUpdateNoticesFingerprint(applicableNotices);
+
+      if (params?.noticesFingerprint !== undefined && params.noticesFingerprint !== fingerprint) {
+        throw new TranslatableError('APP_UPDATE_ERROR_NOTICES_CHANGED', { id: appUrn }, HttpStatus.CONFLICT);
+      }
     }
 
     const request: HandlerResult = this.jobs.submit(appUrn, 'update', async (context) => {

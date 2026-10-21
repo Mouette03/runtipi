@@ -271,6 +271,8 @@ export type MyAppsDto = {
             hasCustomConfig?: boolean;
             latestDockerVersion?: string;
             minTipiVersion?: string | null;
+            updateNotices: Array<UpdateNoticeDto>;
+            updateNoticesFingerprint: string;
         };
     }>;
 };
@@ -350,6 +352,8 @@ export type GuestAppsDto = {
             hasCustomConfig?: boolean;
             latestDockerVersion?: string;
             minTipiVersion?: string | null;
+            updateNotices: Array<UpdateNoticeDto>;
+            updateNoticesFingerprint: string;
         };
     }>;
 };
@@ -406,6 +410,7 @@ export type GetAppDto = {
         uid?: number;
         url_suffix?: string;
         website?: string;
+        update_notices?: Array<UpdateNoticeDto>;
     };
     metadata: {
         latestVersion: number;
@@ -414,6 +419,8 @@ export type GetAppDto = {
         hasCustomConfig?: boolean;
         latestDockerVersion?: string;
         minTipiVersion?: string | null;
+        updateNotices: Array<UpdateNoticeDto>;
+        updateNoticesFingerprint: string;
     };
     app?: {
         createdAt: number;
@@ -538,12 +545,34 @@ export type LifecycleRequestDto = {
     requestId: string | '00000000-0000-0000-0000-000000000000' | 'ffffffff-ffff-ffff-ffff-ffffffffffff';
 };
 
+export type UpdateNoticeDto = {
+    id: string;
+    tipi_version: number;
+    severity: 'info' | 'warning';
+    title: string;
+    message: string;
+    before_update: Array<string>;
+    after_update: Array<string>;
+    require_confirmation: boolean;
+    translations?: {
+        [key: string]: {
+            title?: string;
+            message?: string;
+            before_update?: Array<string>;
+            after_update?: Array<string>;
+        };
+    };
+};
+
 export type UninstallAppBody = {
     removeBackups: boolean;
 };
 
 export type UpdateAppBody = {
     performBackup: boolean;
+    acknowledgedNoticeIds?: Array<string>;
+    targetTipiVersion?: number;
+    noticesFingerprint?: string;
 };
 
 export type LinksDto = {
@@ -1504,7 +1533,14 @@ export type UpdateAllAppsData = {
 };
 
 export type UpdateAllAppsResponses = {
-    200: unknown;
+    200: UpdateAllAppsDto;
+};
+
+export type UpdateAllAppsResponse = UpdateAllAppsResponses[keyof UpdateAllAppsResponses];
+
+export type UpdateAllAppsDto = {
+    updatedAppIds: Array<number>;
+    skippedAppUrns: Array<string>;
 };
 
 export type StartAllAppsData = {

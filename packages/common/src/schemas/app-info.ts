@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { type } from 'arktype';
 import { arkAppUrn } from '../types/app-urn.js';
 
@@ -43,6 +44,48 @@ export const formFieldSchema = type({
   encoding: type.enumerated(...RANDOM_ENCODINGS).optional(),
 });
 
+export const NOTICE_SEVERITIES = ['info', 'warning'] as const;
+export type NoticeSeverity = (typeof NOTICE_SEVERITIES)[number];
+
+const nonEmptyStringArray = () =>
+  type('string')
+    .narrow((v, ctx) => (v.trim().length > 0 ? true : ctx.mustBe('a non-empty string')))
+    .array();
+
+const nonEmptyTrimmedString = () => type('string').narrow((v, ctx) => (v.trim().length > 0 ? true : ctx.mustBe('a non-empty string')));
+
+/**
+ * Translation overrides for a single update notice.
+ * English reference fields are always required; any translated field that is
+ * omitted falls back to the English reference value.
+ */
+export const updateNoticeTranslationSchema = type({
+  title: 'string?',
+  message: 'string?',
+  before_update: 'string[]?',
+  after_update: 'string[]?',
+});
+
+/**
+ * A notice that warns the user about important changes introduced by a package
+ * revision (`tipi_version`). Applicable notices are shown as the first step of
+ * the app update wizard.
+ *
+ * Text fields use English as the reference language. Optional translations can
+ * be provided per locale (e.g. `fr`, `fr-FR`) under `translations`.
+ */
+export const updateNoticeSchema = type({
+  id: nonEmptyTrimmedString(),
+  tipi_version: type('number.integer >= 1'),
+  severity: type.enumerated(...NOTICE_SEVERITIES).default('warning'),
+  title: nonEmptyTrimmedString(),
+  message: nonEmptyTrimmedString(),
+  before_update: nonEmptyStringArray().default(() => []),
+  after_update: nonEmptyStringArray().default(() => []),
+  require_confirmation: 'boolean = true',
+  translations: type({ '[string]': updateNoticeTranslationSchema }).optional(),
+});
+
 export const appInfoSchema = type({
   id: type('string').narrow((v, ctx) => (v.split(':').length === 1 ? true : ctx.mustBe('a string without colons'))),
   urn: arkAppUrn,
@@ -83,6 +126,7 @@ export const appInfoSchema = type({
     .narrow((v, ctx) => (v < Date.now() ? true : ctx.mustBe('a timestamp before now')))
     .default(0),
   force_pull: 'boolean = false',
+  update_notices: updateNoticeSchema.array().default(() => []),
 });
 
 export const frontmatterSchema = type({
@@ -108,3 +152,90 @@ export const frontmatterSchema = type({
 export type AppInfoInput = typeof appInfoSchema.inferIn;
 export type AppInfo = typeof appInfoSchema.infer;
 export type FormField = typeof formFieldSchema.infer;
+export type UpdateNotice = typeof updateNoticeSchema.infer;
+export type UpdateNoticeInput = typeof updateNoticeSchema.inferIn;
+export type UpdateNoticeTranslation = typeof updateNoticeTranslationSchema.infer;
+
+/**
+ * Cross-field validation for `update_notices` that cannot be expressed in the
+ * schema itself: notice ids must be unique and a notice cannot target a package
+ * revision above the one shipping it.
+ *
+ * Returns a list of human-readable errors. An empty list means the notices are
+ * valid.
+ */
+export const getUpdateNoticeConfigErrors = (appInfo: { tipi_version: number; update_notices?: UpdateNotice[] | null }): string[] => {
+  const errors: string[] = [];
+  const notices = appInfo.update_notices ?? [];
+  const seenIds = new Set<string>();
+
+  for (const notice of notices) {
+    if (seenIds.has(notice.id)) {
+      errors.push(`update_notices: duplicate notice id "${notice.id}"`);
+    }
+    seenIds.add(notice.id);
+
+    if (notice.tipi_version > appInfo.tipi_version) {
+      errors.push(
+        `update_notices: notice "${notice.id}" targets revision ${notice.tipi_version} which is above the package revision ${appInfo.tipi_version}`,
+      );
+    }
+  }
+
+  return errors;
+};
+
+/**
+ * Returns the notices that apply when updating from `installedTipiVersion` to
+ * `targetTipiVersion`, sorted by revision. A notice applies when it was
+ * introduced in a revision that is crossed by the update:
+ *
+ *   installedTipiVersion < notice.tipi_version <= targetTipiVersion
+ *
+ * Notices for revisions already installed are never shown again, which also
+ * guarantees they reappear on every retry of a failed update.
+ */
+export const selectUpdateNotices = (
+  notices: UpdateNotice[] | null | undefined,
+  installedTipiVersion: number,
+  targetTipiVersion: number,
+): UpdateNotice[] =>
+  (notices ?? [])
+    .filter((notice) => notice.tipi_version > installedTipiVersion && notice.tipi_version <= targetTipiVersion)
+    .sort((a, b) => a.tipi_version - b.tipi_version);
+
+/**
+ * Computes a stable fingerprint of a set of notices, used to detect content
+ * changes between the moment notices were displayed and the moment the update
+ * is actually submitted. Acknowledging a notice id alone would not detect a
+ * changed message under the same id.
+ */
+export const computeUpdateNoticesFingerprint = (notices: UpdateNotice[] | null | undefined): string => {
+  const stableStringify = (value: unknown): string => {
+    if (value === null || typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`);
+    return `{${entries.join(',')}}`;
+  };
+
+  const serialized = stableStringify(
+    [...(notices ?? [])]
+      .sort((a, b) => a.tipi_version - b.tipi_version || a.id.localeCompare(b.id))
+      .map(({ id, tipi_version, title, message, severity, before_update, after_update, require_confirmation, translations }) => ({
+        after_update,
+        before_update,
+        id,
+        message,
+        require_confirmation,
+        severity,
+        tipi_version,
+        title,
+        translations,
+      })),
+  );
+
+  return createHash('sha256').update(serialized).digest('hex');
+};

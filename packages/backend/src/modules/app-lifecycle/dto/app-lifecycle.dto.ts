@@ -25,6 +25,22 @@ const uninstallAppBodySchema = type({
 
 const updateAppBodySchema = type({
   performBackup: 'boolean',
+  // Ids of the update notices requiring confirmation that were acknowledged
+  // in the update wizard. Only notices still applicable at submission time
+  // are taken into account.
+  acknowledgedNoticeIds: type('string')
+    .array()
+    .default(() => []),
+  // The package revision the user reviewed; rejects silent target changes.
+  targetTipiVersion: 'number?',
+  // Fingerprint of the notices displayed to the user; rejects content
+  // changes under the same ids.
+  noticesFingerprint: 'string?',
+});
+
+const updateAllAppsResultSchema = type({
+  updatedAppIds: 'number[]',
+  skippedAppUrns: 'string[]',
 });
 
 const lifecycleRequestSchema = type({
@@ -36,6 +52,8 @@ export class AppFormBody extends createArkDto(appFormSchema, { name: 'AppFormBod
 export class UninstallAppBody extends createArkDto(uninstallAppBodySchema, { name: 'UninstallAppBody', input: true }) {}
 
 export class UpdateAppBody extends createArkDto(updateAppBodySchema, { name: 'UpdateAppBody', input: true }) {}
+
+export class UpdateAllAppsDto extends createArkDto(updateAllAppsResultSchema, { name: 'UpdateAllAppsDto' }) {}
 
 export class LifecycleRequestDto extends createArkDto(lifecycleRequestSchema, { name: 'LifecycleRequestDto' }) {}
 

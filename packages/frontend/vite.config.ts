@@ -1,8 +1,8 @@
-import path from 'path';
+import path from 'node:path';
 import { reactRouter } from '@react-router/dev/vite';
 import { sentryVitePlugin } from '@sentry/vite-plugin';
-import { defineConfig, type PluginOption } from 'vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
+import { defineConfig, type PluginOption } from 'vite';
 
 const alias = {
   '@': path.resolve(__dirname, './src'),

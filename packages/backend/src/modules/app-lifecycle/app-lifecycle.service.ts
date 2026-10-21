@@ -127,14 +127,38 @@ export class AppLifecycleService {
       ({ app, metadata }) => Number(app.version) < Number(metadata.latestVersion) && app.ignoredVersion !== metadata.latestVersion,
     );
 
-    for (const { app } of availableUpdates) {
+    this.logger.debug(`${availableUpdates.length} apps to update`);
+
+    // Apps whose applicable update notices require manual confirmation are
+    // never updated by the bulk action; they must be updated individually so
+    // the notices are displayed and acknowledged in the update wizard.
+    const updatableApps = availableUpdates.filter(({ metadata }) => !metadata.updateNotices.some((notice) => notice.require_confirmation));
+    const skippedApps = availableUpdates.filter(({ metadata }) => metadata.updateNotices.some((notice) => notice.require_confirmation));
+
+    if (skippedApps.length > 0) {
+      this.logger.info(
+        `Skipping update of ${skippedApps.length} apps because their update notices require manual confirmation: ${skippedApps
+          .map(({ app }) => createAppUrn(app.appName, app.appStoreSlug))
+          .join(', ')}`,
+      );
+    }
+
+    const updatedAppIds: number[] = [];
+
+    for (const { app } of updatableApps) {
       try {
         const appUrn = createAppUrn(app.appName, app.appStoreSlug);
-        await this.updateApp({ appUrn, performBackup: true });
+        const result = await this.updateApp({ appUrn, performBackup: true });
+        if (result) updatedAppIds.push(app.id);
       } catch (e) {
         this.logger.error(`Failed to update app ${app.id}`, e);
       }
     }
+
+    return {
+      updatedAppIds,
+      skippedAppUrns: skippedApps.map(({ app }) => createAppUrn(app.appName, app.appStoreSlug)),
+    };
   }
 
   async restartRunningApps() {

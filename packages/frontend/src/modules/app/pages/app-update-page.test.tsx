@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import i18next from 'i18next';
 import { I18nextProvider, initReactI18next } from 'react-i18next';
-import { render, screen } from '@/tests/test-utils';
+import { fireEvent, render, screen } from '@/tests/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AppUpdatePage from './app-update-page';
 
@@ -70,9 +70,9 @@ vi.mock('@/components/ui/Stepper/Stepper', () => ({
 }));
 
 vi.mock('@/components/ui/Switch', () => ({
-  Switch: ({ label }: { label: string }) => (
+  Switch: ({ label, checked, onCheckedChange }: { label: string; checked?: boolean; onCheckedChange?: (checked: boolean) => void }) => (
     <label>
-      <input type="checkbox" />
+      <input type="checkbox" checked={checked} onChange={(e) => onCheckedChange?.(e.target.checked)} />
       {label}
     </label>
   ),
@@ -126,6 +126,11 @@ beforeEach(async () => {
             APP_UPDATE_FORM_TITLE: 'Update {{name}}',
             APP_UPDATE_INFORMATION_SUBTITLE: 'To update <name/> to version <strong/>, follow the steps to review and apply the update.',
             APP_UPDATE_INFORMATION_TITLE: 'Information',
+            APP_UPDATE_WARNINGS_TITLE: 'Warnings',
+            APP_UPDATE_WARNINGS_SUBTITLE: 'Important changes and required steps for this update.',
+            APP_UPDATE_WARNINGS_BEFORE: 'Before the update',
+            APP_UPDATE_WARNINGS_AFTER: 'After the update',
+            APP_UPDATE_WARNINGS_ACKNOWLEDGE: 'I have read the warnings and completed the required preparations.',
             LOADING: 'Loading',
           },
         },
@@ -158,5 +163,131 @@ describe('AppUpdatePage', () => {
     expect(screen.queryByText('pwned')).not.toBeInTheDocument();
     expect(container.querySelectorAll('strong')).toHaveLength(1);
     expect(container).toHaveTextContent(`To update Example App to version ${maliciousVersion}, follow the steps to review and apply the update.`);
+  });
+
+  it('does not render a warnings step when no update notices apply', () => {
+    const appData = {
+      info: {
+        name: 'Example App',
+        urn: 'example-app:store-id',
+        version: '1.0.0',
+      },
+      metadata: {
+        latestDockerVersion: '2.0.0',
+        latestVersion: 2,
+        updateNotices: [],
+        updateNoticesFingerprint: 'fingerprint',
+      },
+    } as unknown as Parameters<typeof AppUpdatePage>[0]['loaderData'];
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <AppUpdatePage {...({ loaderData: appData } as unknown as Parameters<typeof AppUpdatePage>[0])} />
+      </I18nextProvider>,
+    );
+
+    expect(screen.queryByText('Warnings')).not.toBeInTheDocument();
+    expect(screen.getByText('Information')).toBeInTheDocument();
+  });
+
+  it('renders applicable notices as the first step and blocks progression until acknowledged', () => {
+    const appData = {
+      info: {
+        name: 'Example App',
+        urn: 'example-app:store-id',
+        version: '1.0.0',
+      },
+      metadata: {
+        latestDockerVersion: '2.0.0',
+        latestVersion: 2,
+        updateNotices: [
+          {
+            id: 'database-migration-2',
+            tipi_version: 2,
+            severity: 'warning',
+            title: 'Database migration',
+            message: 'The first startup may take several minutes.',
+            before_update: ['Check available disk space.'],
+            after_update: ['Do not restart during the migration.'],
+            require_confirmation: true,
+          },
+        ],
+        updateNoticesFingerprint: 'fingerprint',
+      },
+    } as unknown as Parameters<typeof AppUpdatePage>[0]['loaderData'];
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <AppUpdatePage {...({ loaderData: appData } as unknown as Parameters<typeof AppUpdatePage>[0])} />
+      </I18nextProvider>,
+    );
+
+    expect(screen.getByText('Warnings')).toBeInTheDocument();
+    expect(screen.getByText('Database migration')).toBeInTheDocument();
+    expect(screen.getByText('The first startup may take several minutes.')).toBeInTheDocument();
+    expect(screen.getByText('Check available disk space.')).toBeInTheDocument();
+    expect(screen.getByText('Do not restart during the migration.')).toBeInTheDocument();
+
+    // Next is disabled while the required notice is not acknowledged
+    const nextButton = screen.getByText('Next').closest('button') as HTMLButtonElement;
+    expect(nextButton).toHaveProperty('disabled', true);
+
+    // Acknowledging the notice unlocks the next step
+    // (the first checkbox is the notice acknowledgement; the second one is
+    // the backup switch of the last step, all rendered by the step mocks)
+    const acknowledgeCheckbox = screen.getAllByRole('checkbox')[0];
+    if (!acknowledgeCheckbox) throw new Error('Notice acknowledgement checkbox not found');
+    fireEvent.click(acknowledgeCheckbox);
+    expect(nextButton).toHaveProperty('disabled', false);
+  });
+
+  it('localizes notices using the matching translation with fallback to the English reference', async () => {
+    const appData = {
+      info: {
+        name: 'Example App',
+        urn: 'example-app:store-id',
+        version: '1.0.0',
+      },
+      metadata: {
+        latestDockerVersion: '2.0.0',
+        latestVersion: 2,
+        updateNotices: [
+          {
+            id: 'database-migration-2',
+            tipi_version: 2,
+            severity: 'info',
+            title: 'Database migration',
+            message: 'The first startup may take several minutes.',
+            before_update: [],
+            after_update: ['Verify the logs.'],
+            require_confirmation: false,
+            translations: {
+              fr: {
+                title: 'Migration de la base',
+                message: 'Le premier démarrage peut prendre plusieurs minutes.',
+                after_update: ['Vérifiez les journaux.'],
+              },
+            },
+          },
+        ],
+        updateNoticesFingerprint: 'fingerprint',
+      },
+    } as unknown as Parameters<typeof AppUpdatePage>[0]['loaderData'];
+
+    render(
+      <I18nextProvider i18n={i18n}>
+        <AppUpdatePage {...({ loaderData: appData } as unknown as Parameters<typeof AppUpdatePage>[0])} />
+      </I18nextProvider>,
+    );
+
+    // English reference is displayed for the English locale
+    expect(screen.getByText('Database migration')).toBeInTheDocument();
+
+    // ... and the French translation is used when the language is French
+    await i18n.changeLanguage('fr-FR');
+    expect(await screen.findByText('Migration de la base')).toBeInTheDocument();
+    expect(screen.getByText('Le premier démarrage peut prendre plusieurs minutes.')).toBeInTheDocument();
+    expect(screen.getByText('Vérifiez les journaux.')).toBeInTheDocument();
+    await i18n.changeLanguage('en');
   });
 });

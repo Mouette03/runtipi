@@ -1287,7 +1287,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateAllAppsDto"
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -3528,11 +3535,22 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "updateNotices": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UpdateNoticeDto"
+                      }
+                    },
+                    "updateNoticesFingerprint": {
+                      "type": "string"
                     }
                   },
                   "required": [
                     "latestVersion",
-                    "localSubdomain"
+                    "localSubdomain",
+                    "updateNotices",
+                    "updateNoticesFingerprint"
                   ]
                 }
               },
@@ -3936,11 +3954,22 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "updateNotices": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UpdateNoticeDto"
+                      }
+                    },
+                    "updateNoticesFingerprint": {
+                      "type": "string"
                     }
                   },
                   "required": [
                     "latestVersion",
-                    "localSubdomain"
+                    "localSubdomain",
+                    "updateNotices",
+                    "updateNoticesFingerprint"
                   ]
                 }
               },
@@ -4177,6 +4206,12 @@
               },
               "website": {
                 "type": "string"
+              },
+              "update_notices": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/UpdateNoticeDto"
+                }
               }
             },
             "required": [
@@ -4232,11 +4267,22 @@
                     "type": "null"
                   }
                 ]
+              },
+              "updateNotices": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/UpdateNoticeDto"
+                }
+              },
+              "updateNoticesFingerprint": {
+                "type": "string"
               }
             },
             "required": [
               "latestVersion",
-              "localSubdomain"
+              "localSubdomain",
+              "updateNotices",
+              "updateNoticesFingerprint"
             ]
           },
           "app": {
@@ -4830,6 +4876,19 @@
         "properties": {
           "performBackup": {
             "type": "boolean"
+          },
+          "acknowledgedNoticeIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "targetTipiVersion": {
+            "type": "number"
+          },
+          "noticesFingerprint": {
+            "type": "string"
           }
         },
         "required": [
@@ -5653,6 +5712,99 @@
           "hasChanges",
           "localVersion",
           "templateVersion"
+        ]
+      },
+      "UpdateNoticeDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tipi_version": {
+            "type": "number"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "before_update": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "after_update": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "require_confirmation": {
+            "type": "boolean"
+          },
+          "translations": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "before_update": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "after_update": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "id",
+          "tipi_version",
+          "title",
+          "message",
+          "require_confirmation"
+        ]
+      },
+      "UpdateAllAppsDto": {
+        "type": "object",
+        "properties": {
+          "updatedAppIds": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "skippedAppUrns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "updatedAppIds",
+          "skippedAppUrns"
         ]
       }
     }

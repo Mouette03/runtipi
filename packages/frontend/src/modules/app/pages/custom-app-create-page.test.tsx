@@ -43,8 +43,17 @@ vi.mock('@/components/ui/Input/Input', () => ({
 }));
 
 vi.mock('@/components/multi-service-form/multi-service-form', () => ({
-  MultiServiceForm: ({ onSubmit }: { onSubmit?: (data: { schemaVersion: 2; services: [] }) => void }) => (
-    <button type="button" onClick={() => onSubmit?.({ schemaVersion: 2, services: [] })}>
+  MultiServiceForm: ({ onSubmit }: { onSubmit?: (data: Record<string, unknown>) => void }) => (
+    <button
+      type="button"
+      onClick={() =>
+        onSubmit?.({
+          $schema: 'https://schemas.runtipi.io/v2/dynamic-compose.json',
+          schemaVersion: 2,
+          services: [{ name: 'web', image: 'nginx:latest' }],
+        })
+      }
+    >
       submit-services
     </button>
   ),

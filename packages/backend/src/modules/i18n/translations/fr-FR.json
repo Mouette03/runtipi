@@ -316,6 +316,8 @@
   "APP_UPDATE_WARNINGS_AFTER": "Après la mise à jour",
   "APP_UPDATE_WARNINGS_ACKNOWLEDGE": "J'ai lu les avertissements et effectué les préparatifs nécessaires.",
   "APP_UPDATE_ERROR_NOTICES_NOT_ACKNOWLEDGED": "L'application {{id}} comporte des avertissements de mise à jour à consulter et confirmer avant la mise à jour.",
+  "APP_UPDATE_ERROR_TARGET_REQUIRED": "L'application {{id}} nécessite la confirmation de la version consultée avant la mise à jour. Veuillez relire la mise à jour.",
+  "APP_UPDATE_ERROR_FINGERPRINT_REQUIRED": "L'application {{id}} nécessite la confirmation des avertissements avec leur contenu actuel. Veuillez relire la mise à jour.",
   "APP_UPDATE_ERROR_TARGET_CHANGED": "La version disponible de {{id}} a changé depuis l'affichage des avertissements. Veuillez relire la mise à jour.",
   "APP_UPDATE_ERROR_NOTICES_CHANGED": "Les avertissements de mise à jour de {{id}} ont changé depuis leur affichage. Veuillez les relire.",
   "APP_UPDATE_ALL_SKIPPED_NOTICES": "{{count}} application(s) ont été ignorées car leurs avertissements de mise à jour nécessitent une confirmation manuelle.",

@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { type } from 'arktype';
-import {
-  appInfoSchema,
-  computeUpdateNoticesFingerprint,
-  getUpdateNoticeConfigErrors,
-  selectUpdateNotices,
-  type AppInfo,
-  type UpdateNotice,
-} from '../app-info.js';
+import { appInfoSchema, getUpdateNoticeConfigErrors, selectUpdateNotices, type AppInfo, type UpdateNotice } from '../app-info.js';
 
 const assertValid = (parsed: ReturnType<typeof appInfoSchema>): AppInfo => {
   if (parsed instanceof type.errors) {
@@ -196,40 +189,5 @@ describe('selectUpdateNotices', () => {
   it('handles null or undefined notice lists', () => {
     expect(selectUpdateNotices(null, 0, 25)).toEqual([]);
     expect(selectUpdateNotices(undefined, 0, 25)).toEqual([]);
-  });
-});
-
-describe('computeUpdateNoticesFingerprint', () => {
-  it('is stable across key order changes', () => {
-    const a: UpdateNotice = { ...baseNotice };
-    const b: UpdateNotice = {
-      ...baseNotice,
-      // Rebuild the same content with different construction order
-      before_update: [...baseNotice.before_update],
-      title: 'Database migration',
-    };
-
-    expect(computeUpdateNoticesFingerprint([a])).toBe(computeUpdateNoticesFingerprint([b]));
-  });
-
-  it('changes when the message content changes under the same id', () => {
-    const changed: UpdateNotice = { ...baseNotice, message: 'The first startup may take up to an hour.' };
-
-    expect(computeUpdateNoticesFingerprint([baseNotice])).not.toBe(computeUpdateNoticesFingerprint([changed]));
-  });
-
-  it('changes when translations change', () => {
-    const translated: UpdateNotice = {
-      ...baseNotice,
-      translations: { fr: { title: 'Migration de la base' } },
-    };
-
-    expect(computeUpdateNoticesFingerprint([baseNotice])).not.toBe(computeUpdateNoticesFingerprint([translated]));
-  });
-
-  it('is order-independent across notices', () => {
-    const other: UpdateNotice = { ...baseNotice, id: 'other', tipi_version: 23 };
-
-    expect(computeUpdateNoticesFingerprint([baseNotice, other])).toBe(computeUpdateNoticesFingerprint([other, baseNotice]));
   });
 });

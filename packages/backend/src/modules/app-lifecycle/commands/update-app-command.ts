@@ -27,6 +27,7 @@ export class UpdateAppCommand extends AppLifecycleCommand {
     private readonly performBackup: boolean = false,
     private readonly wasRunningBeforeUpdate: boolean = false,
     private readonly context?: AppJobContext,
+    private readonly targetTipiVersion?: number,
   ) {
     super(moduleRef, docker);
   }
@@ -124,6 +125,13 @@ export class UpdateAppCommand extends AppLifecycleCommand {
       await marketplaceService.copyAppFromRepoToInstalled(appUrn);
       const targetAppInfo = await appFilesManager.getInstalledAppInfo(appUrn);
       if (!targetAppInfo) throw new Error(`App ${appUrn} config not found`);
+
+      // The staged files must match the revision the user reviewed and the
+      // handler validated; a catalog updated in between aborts the update
+      // (the recovery path below restores the previous files).
+      if (this.targetTipiVersion !== undefined && targetAppInfo.tipi_version !== this.targetTipiVersion) {
+        throw new Error(`App ${appUrn} staged revision ${targetAppInfo.tipi_version} does not match the reviewed revision ${this.targetTipiVersion}`);
+      }
 
       const targetForm = await validation.validateUpdateConfigSettings(appUrn, targetAppInfo, { ...form }, appBeforeUpdate.id);
 

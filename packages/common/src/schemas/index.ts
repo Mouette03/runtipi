@@ -32,9 +32,9 @@ import type {
   UpdateNoticeInput,
   UpdateNoticeTranslation,
 } from './app-info.js';
-import { computeUpdateNoticesFingerprint, getUpdateNoticeConfigErrors, selectUpdateNotices } from './app-info.js';
+import { getUpdateNoticeConfigErrors, selectUpdateNotices } from './app-info.js';
 
-import type { SSE, Topic } from './sse.js';
+import { type SSE, type Topic, sseSchema } from './sse.js';
 import { appJobSchema, type AppJob } from './app-job.js';
 
 export {
@@ -55,9 +55,9 @@ export {
   ARCHITECTURES,
   appInfoSchema,
   frontmatterSchema,
+  sseSchema,
   updateNoticeSchema,
   updateNoticeTranslationSchema,
-  computeUpdateNoticesFingerprint,
   getUpdateNoticeConfigErrors,
   selectUpdateNotices,
   type ServiceInput,

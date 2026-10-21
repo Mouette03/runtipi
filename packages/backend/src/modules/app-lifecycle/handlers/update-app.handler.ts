@@ -2,7 +2,8 @@ import { TranslatableError } from '@/common/error/translatable-error';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { ConflictException, HttpStatus, Injectable } from '@nestjs/common';
-import { computeUpdateNoticesFingerprint, selectUpdateNotices } from '@runtipi/common/schemas';
+import { computeUpdateNoticesFingerprint } from '@/common/helpers/update-notices';
+import { selectUpdateNotices } from '@runtipi/common/schemas';
 import type { AppUrn } from '@runtipi/common/types';
 import semver from 'semver';
 import { AppsRepository } from '../../apps/apps.repository';
@@ -56,6 +57,18 @@ export class UpdateAppHandler implements ILifecycleHandler<UpdateAppParams> {
     // notices again on the next attempt.
     const applicableNotices = selectUpdateNotices(updateNotices, app.version, latestVersion);
     const requiredNotices = applicableNotices.filter((notice) => notice.require_confirmation);
+    const currentFingerprint = computeUpdateNoticesFingerprint(applicableNotices);
+
+    // A reviewed snapshot must always match what is currently applicable, even
+    // when the notices no longer require confirmation: rejecting a stale
+    // snapshot forces the user to review the new content.
+    if (params?.targetTipiVersion !== undefined && params.targetTipiVersion !== latestVersion) {
+      throw new TranslatableError('APP_UPDATE_ERROR_TARGET_CHANGED', { id: appUrn }, HttpStatus.CONFLICT);
+    }
+
+    if (params?.noticesFingerprint !== undefined && params.noticesFingerprint !== currentFingerprint) {
+      throw new TranslatableError('APP_UPDATE_ERROR_NOTICES_CHANGED', { id: appUrn }, HttpStatus.CONFLICT);
+    }
 
     if (requiredNotices.length > 0) {
       const acknowledged = new Set(params?.acknowledgedNoticeIds ?? []);
@@ -65,14 +78,14 @@ export class UpdateAppHandler implements ILifecycleHandler<UpdateAppParams> {
         throw new TranslatableError('APP_UPDATE_ERROR_NOTICES_NOT_ACKNOWLEDGED', { id: appUrn }, HttpStatus.BAD_REQUEST);
       }
 
-      if (params?.targetTipiVersion !== undefined && params.targetTipiVersion !== latestVersion) {
-        throw new TranslatableError('APP_UPDATE_ERROR_TARGET_CHANGED', { id: appUrn }, HttpStatus.CONFLICT);
+      // A confirmation only makes sense against a fully identified snapshot:
+      // the reviewed target revision and notice content must be provided too.
+      if (params?.targetTipiVersion === undefined) {
+        throw new TranslatableError('APP_UPDATE_ERROR_TARGET_REQUIRED', { id: appUrn }, HttpStatus.BAD_REQUEST);
       }
 
-      const fingerprint = computeUpdateNoticesFingerprint(applicableNotices);
-
-      if (params?.noticesFingerprint !== undefined && params.noticesFingerprint !== fingerprint) {
-        throw new TranslatableError('APP_UPDATE_ERROR_NOTICES_CHANGED', { id: appUrn }, HttpStatus.CONFLICT);
+      if (params?.noticesFingerprint === undefined) {
+        throw new TranslatableError('APP_UPDATE_ERROR_FINGERPRINT_REQUIRED', { id: appUrn }, HttpStatus.BAD_REQUEST);
       }
     }
 
@@ -90,6 +103,7 @@ export class UpdateAppHandler implements ILifecycleHandler<UpdateAppParams> {
             form: app.config,
             performBackup: params?.performBackup ?? false,
             wasRunningBeforeUpdate: app.status === 'running',
+            targetTipiVersion: params?.targetTipiVersion,
           },
           context,
         );

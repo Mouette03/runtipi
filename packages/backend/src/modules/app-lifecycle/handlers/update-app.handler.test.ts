@@ -1,4 +1,5 @@
 import type { SSEService } from '@/core/sse/sse.service';
+import { computeUpdateNoticesFingerprint } from '@/common/helpers/update-notices';
 import { ConfigurationService } from '@/core/config/configuration.service';
 import { LoggerService } from '@/core/logger/logger.service';
 import { AppsRepository } from '@/modules/apps/apps.repository';
@@ -167,20 +168,74 @@ test('rejects an update when a required notice is not acknowledged', async () =>
   await expect(handler.execute(appUrn, { performBackup: true, acknowledgedNoticeIds: ['some-other-notice'] })).rejects.toThrow();
 });
 
-test('accepts an update when all required notices are acknowledged', async () => {
-  const { handler, commandFactory } = await createHandler({ updateNotices: [migrationNotice] });
+test('accepts an update when all required notices are acknowledged with a full snapshot', async () => {
+  const { handler, commandFactory, marketplaceService } = await createHandler({ updateNotices: [migrationNotice] });
+  const fingerprint = computeUpdateNoticesFingerprint([migrationNotice]);
+  void marketplaceService;
 
   await handler.execute(appUrn, {
     performBackup: true,
     acknowledgedNoticeIds: [migrationNotice.id],
     targetTipiVersion: 2,
+    noticesFingerprint: fingerprint,
   });
   await waitForQueueResult();
 
   expect(commandFactory.execute).toHaveBeenCalledWith(
-    expect.objectContaining({ command: 'update', appUrn, performBackup: true }),
+    expect.objectContaining({ command: 'update', appUrn, performBackup: true, targetTipiVersion: 2 }),
     expect.objectContaining({ signal: expect.any(AbortSignal) }),
   );
+});
+
+test('rejects an acknowledged update when the snapshot is incomplete', async () => {
+  const { handler } = await createHandler({ updateNotices: [migrationNotice] });
+
+  // Missing target revision
+  await expect(
+    handler.execute(appUrn, {
+      performBackup: true,
+      acknowledgedNoticeIds: [migrationNotice.id],
+      noticesFingerprint: 'fingerprint',
+    }),
+  ).rejects.toThrow();
+
+  // Missing fingerprint
+  await expect(
+    handler.execute(appUrn, {
+      performBackup: true,
+      acknowledgedNoticeIds: [migrationNotice.id],
+      targetTipiVersion: 2,
+    }),
+  ).rejects.toThrow();
+});
+
+test('rejects an update with a specific error when a notice is not acknowledged', async () => {
+  const { handler } = await createHandler({ updateNotices: [migrationNotice] });
+
+  await expect(handler.execute(appUrn, { performBackup: true })).rejects.toMatchObject({
+    message: 'APP_UPDATE_ERROR_NOTICES_NOT_ACKNOWLEDGED',
+  });
+});
+
+test('requires acknowledgements again after a failed update', async () => {
+  const publishResult = { success: false, message: 'registry unavailable', rollbackSucceeded: true } as const;
+  const { handler } = await createHandler({ updateNotices: [migrationNotice], publishResult });
+  const fingerprint = computeUpdateNoticesFingerprint([migrationNotice]);
+
+  // First attempt fails after the update was accepted
+  await handler.execute(appUrn, {
+    performBackup: true,
+    acknowledgedNoticeIds: [migrationNotice.id],
+    targetTipiVersion: 2,
+    noticesFingerprint: fingerprint,
+  });
+  await waitForQueueResult();
+
+  // The retry must acknowledge the notices again: acknowledgements are never
+  // persisted, so the warnings reappear on the next attempt.
+  await expect(handler.execute(appUrn, { performBackup: true })).rejects.toMatchObject({
+    message: 'APP_UPDATE_ERROR_NOTICES_NOT_ACKNOWLEDGED',
+  });
 });
 
 test('does not require acknowledgements for notices that do not need confirmation', async () => {

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { type } from 'arktype';
 import { arkAppUrn } from '../types/app-urn.js';
 
@@ -60,10 +59,10 @@ const nonEmptyTrimmedString = () => type('string').narrow((v, ctx) => (v.trim().
  * omitted falls back to the English reference value.
  */
 export const updateNoticeTranslationSchema = type({
-  title: 'string?',
-  message: 'string?',
-  before_update: 'string[]?',
-  after_update: 'string[]?',
+  title: nonEmptyTrimmedString().optional(),
+  message: nonEmptyTrimmedString().optional(),
+  before_update: nonEmptyStringArray().optional(),
+  after_update: nonEmptyStringArray().optional(),
 });
 
 /**
@@ -203,39 +202,3 @@ export const selectUpdateNotices = (
   (notices ?? [])
     .filter((notice) => notice.tipi_version > installedTipiVersion && notice.tipi_version <= targetTipiVersion)
     .sort((a, b) => a.tipi_version - b.tipi_version);
-
-/**
- * Computes a stable fingerprint of a set of notices, used to detect content
- * changes between the moment notices were displayed and the moment the update
- * is actually submitted. Acknowledging a notice id alone would not detect a
- * changed message under the same id.
- */
-export const computeUpdateNoticesFingerprint = (notices: UpdateNotice[] | null | undefined): string => {
-  const stableStringify = (value: unknown): string => {
-    if (value === null || typeof value !== 'object') return JSON.stringify(value);
-    if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, v]) => v !== undefined)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`);
-    return `{${entries.join(',')}}`;
-  };
-
-  const serialized = stableStringify(
-    [...(notices ?? [])]
-      .sort((a, b) => a.tipi_version - b.tipi_version || a.id.localeCompare(b.id))
-      .map(({ id, tipi_version, title, message, severity, before_update, after_update, require_confirmation, translations }) => ({
-        after_update,
-        before_update,
-        id,
-        message,
-        require_confirmation,
-        severity,
-        tipi_version,
-        title,
-        translations,
-      })),
-  );
-
-  return createHash('sha256').update(serialized).digest('hex');
-};

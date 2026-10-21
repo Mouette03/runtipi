@@ -79,7 +79,10 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
 
   const [backupApp, setBackupApp] = useState(true);
   const [currentStep, setCurrentStep] = useState(0);
-  const [acknowledgedNoticeIds, setAcknowledgedNoticeIds] = useState<string[]>([]);
+  // Acknowledgements are bound to the notice snapshot they were given for:
+  // if the target revision or the notice content changes (e.g. the catalog
+  // refreshed), they are discarded and the warnings must be reviewed again.
+  const [acknowledged, setAcknowledged] = useState<{ snapshotKey: string; ids: string[] }>({ snapshotKey: '', ids: [] });
 
   const configDiffQuery = useQuery({
     ...getAppConfigDiffOptions({ path: { urn: info.urn } }),
@@ -113,7 +116,16 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
 
   const requiredNoticeIds = useMemo(() => updateNotices.filter((notice) => notice.require_confirmation).map((notice) => notice.id), [updateNotices]);
   const hasWarningsStep = updateNotices.length > 0;
+  const noticesSnapshotKey = hasWarningsStep ? `${metadata?.latestVersion}:${metadata?.updateNoticesFingerprint}` : '';
+  const acknowledgedNoticeIds = acknowledged.snapshotKey === noticesSnapshotKey ? acknowledged.ids : [];
   const allRequiredAcknowledged = requiredNoticeIds.every((id) => acknowledgedNoticeIds.includes(id));
+
+  const toggleAcknowledged = (noticeId: string, checked: boolean) => {
+    setAcknowledged((state) => ({
+      snapshotKey: noticesSnapshotKey,
+      ids: checked ? [...state.ids, noticeId] : state.ids.filter((id) => id !== noticeId),
+    }));
+  };
 
   const steps = useMemo(() => {
     return [
@@ -127,6 +139,13 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
 
   const isLastStep = currentStep === steps.length - 1;
   const isWarningsStep = hasWarningsStep && currentStep === 0;
+
+  // The step triggers only render a visual "disabled" state; navigation is
+  // actually guarded here so unacknowledged warnings cannot be skipped.
+  const handleStepChange = (step: number) => {
+    if (hasWarningsStep && !allRequiredAcknowledged && step > 0) return;
+    setCurrentStep(step);
+  };
 
   const handleNextStep = () => {
     if (isWarningsStep && !allRequiredAcknowledged) return;
@@ -142,7 +161,7 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
         // the applicable notices and enforces the acknowledgement.
         ...(hasWarningsStep
           ? {
-              acknowledgedNoticeIds: requiredNoticeIds,
+              acknowledgedNoticeIds,
               targetTipiVersion: metadata?.latestVersion,
               noticesFingerprint: metadata?.updateNoticesFingerprint,
             }
@@ -175,7 +194,7 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
                   key={step.id}
                   step={index}
                   title={step.title}
-                  onStepChange={setCurrentStep}
+                  onStepChange={handleStepChange}
                   disabled={hasWarningsStep && !allRequiredAcknowledged && index > 0}
                 />
               ))}
@@ -220,9 +239,7 @@ export default function AppUpdatePage({ loaderData }: Route.ComponentProps) {
                           {notice.require_confirmation && (
                             <Switch
                               checked={acknowledgedNoticeIds.includes(notice.id)}
-                              onCheckedChange={(checked) =>
-                                setAcknowledgedNoticeIds((ids) => (checked ? [...ids, notice.id] : ids.filter((id) => id !== notice.id)))
-                              }
+                              onCheckedChange={(checked) => toggleAcknowledged(notice.id, checked)}
                               label={t('APP_UPDATE_WARNINGS_ACKNOWLEDGE')}
                               className="mt-3 mb-0"
                             />
